@@ -33,13 +33,16 @@ class Classifier():
         about_layers = ", Layers: "+str(self.layers)
         return "Classifier("+about_hyperp+about_layers+")\n"
 
-    def __initialization(self, row, col, variant='he', bias=False):
+    def __initialization(self, row, col, variant='glorot', bias=False):
         # Initializing the weight matrix with random values.
 
         if variant == 'he':
             w = np.random.randn(row, col) * np.sqrt(2 / row)
         elif variant == 'xavier':
             w = np.random.randn(row, col) * np.sqrt(1 / row)
+        elif variant == 'glorot':
+            limit = np.sqrt(6/(row + col))
+            w = 2 * limit * (np.random.random_sample((row, col)) - 0.5)
         elif variant == 'random':
             w = np.random.randn(row, col)
         elif variant == 'zero':
@@ -77,6 +80,18 @@ class Classifier():
         vector = vector.reshape((self.output, -1))
 
         return vector
+
+    def __print_epoch_status(self, epoch, curr_example=0, epoch_start=False, epoch_end=False):
+        if epoch_start:
+            print("{}/{} Epochs".format(epoch, self.epochs))
+
+        percent = int(curr_example/self.data_size*40)
+        print("\t{}/{} [".format(curr_example, self.data_size)+percent*"="+">"+(40-percent)*"-"+"]", end="\r")
+
+        if epoch_end:
+            print("\t{}/{} ".format(self.data_size, self.data_size)+"["+"="*41+"] loss: "+str(self.training_loss[epoch]))
+
+        return
 
     def forward(self, x):
         self.a = [x]
@@ -119,6 +134,7 @@ class Classifier():
         for e in range(self.epochs):
             predict = list()
             self.zero_grad()
+            self.__print_epoch_status(e+1, epoch_start=True)
             for i in range(self.data_size):
                 # Forward pass
                 x_tmp = self.__reshape_input(x[i])
@@ -126,13 +142,14 @@ class Classifier():
                 predict.append(output)
                 y_tmp = self.__reshape_output(y[i])
                 self.backward(x_tmp, y_tmp, output)
+                self.__print_epoch_status(e+1, curr_example=i+1)
             self.update_weights()
 
             if debug:
                 self.debug(more_verbose=debug_verbose)
             predict = np.array(predict)
             self.training_loss.append(np.squeeze(MSE(y, predict)))
-            print(f"Epochs: {e+1}/{self.epochs}.. Training Loss: {self.training_loss[e]}..")
+            self.__print_epoch_status(e, epoch_end=True)
 
     def zero_grad(self):
         self.dW = dict()
@@ -187,8 +204,8 @@ class Classifier():
         return predicted
 
 if __name__ == '__main__':
-    fname = 'mnist_train.csv'
-    data = pd.read_csv(fname, nrows=400)
+    fname = 'mnist_test.csv'
+    data = pd.read_csv(fname, nrows=1000)
 
     ### Preproscessing
     scale = MinMaxScaler()
@@ -207,7 +224,7 @@ if __name__ == '__main__':
 
     ### Running the model
     network = Classifier(784, 10, [32], learning_rate=0.1)
-    network.model(x, y, 100)
+    network.model(x, y, 10)
     network.epoch_vs_error(savefig=True)
     print(network.predict(x[5]), y[5])
     # print(network.activations)

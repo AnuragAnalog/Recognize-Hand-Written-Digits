@@ -9,7 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 # Custom Modules
 from metrics import MSE
 from encoding import OneHotEncoder
-from activation_function import sigmoid, softmax
+from activations import sigmoid
 
 class Classifier():
     def __init__(self, features, labels, hidden_layer=[], learning_rate=0.01):
@@ -49,9 +49,9 @@ class Classifier():
             w = np.zeros((row, col))
 
         if bias:
-            b = np.random.randn((col, 1))
+            b = np.random.randn((row, 1))
         else:
-            b = np.zeros((col, 1))
+            b = np.zeros((row, 1))
 
         return w, b
 
@@ -60,7 +60,7 @@ class Classifier():
         self.b = dict()
 
         for n in range(self.layers-1):
-            w, b = self.__initialization(self.nodes[n], self.nodes[n+1])
+            w, b = self.__initialization(self.nodes[n+1], self.nodes[n])
             self.W["W"+str(n+1)], self.b["b"+str(n+1)] = w, b
 
         return
@@ -94,27 +94,26 @@ class Classifier():
         return
 
     def forward(self, x):
-        self.a = [x]
+        self.a = {'a0': x}
+        self.z = dict()
 
         for n in range(self.layers-1):
-            x = sigmoid(np.dot(self.W['W'+str(n+1)].T, x) + self.b['b'+str(n+1)])
-            self.a.append(x)
+            self.z['z'+str(n+1)] = np.dot(self.W['W'+str(n+1)], self.a['a'+str(n)]) + self.b['b'+str(n+1)]
+            self.a['a'+str(n+1)] = sigmoid(self.z['z'+str(n+1)])
 
-        return x
+        return self.a['a'+str(self.layers - 1)]
 
     def backward(self, x, actual, output):
-        self.da = dict()
-        self.dz = dict()
+        self.delta = [0] * self.layers
 
         for n in range(self.layers-1, 0, -1):
             if n == self.layers-1:
-                self.da['da'+str(n)] = (actual - self.a[n])
+                self.delta[n] = (actual - self.a['a'+str(n)])
             else:
-                self.da['da'+str(n)] = np.dot(self.dW['dW'+str(n+1)], self.dz['dz'+str(n+1)])
+                self.delta[n] = np.dot(self.W['W'+str(n+1)].T, self.delta[n+1]*sigmoid(self.z['z'+str(n+1)], derivative=True))
 
-            self.dz['dz'+str(n)] = self.da['da'+str(n)] * (self.a[n] * (1 - self.a[n]))
-            self.dW['dW'+str(n)] += np.dot(self.dz['dz'+str(n)], self.a[n-1].T).T/self.data_size
-            self.db['db'+str(n)] += self.dz['dz'+str(n)]/self.data_size
+            self.dW['dW'+str(n)] += np.dot(self.delta[n]*sigmoid(self.z['z'+str(n)], derivative=True), self.a['a'+str(n-1)].T)/self.data_size
+            self.db['db'+str(n)] += self.delta[n]*sigmoid(self.z['z'+str(n)], derivative=True)/self.data_size
 
         return
 
@@ -156,7 +155,7 @@ class Classifier():
         self.db = dict()
 
         for n in range(self.layers-1):
-            self.dW['dW'+str(n+1)] = np.zeros((self.nodes[n], self.nodes[n+1]))
+            self.dW['dW'+str(n+1)] = np.zeros((self.nodes[n+1], self.nodes[n]))
             self.db['db'+str(n+1)] = np.zeros((self.nodes[n+1], 1))
 
         return
@@ -204,27 +203,27 @@ class Classifier():
         return predicted
 
 if __name__ == '__main__':
-    fname = 'mnist_test.csv'
-    data = pd.read_csv(fname, nrows=1000)
+    fname = 'iris-data.csv'
+    data = pd.read_csv(fname)
 
     ### Preproscessing
-    scale = MinMaxScaler()
+    # scale = MinMaxScaler()
     encode = OneHotEncoder()
 
     encode.fit(data.label)
     labels = encode.transform(data.label)
+    # labels = data.label.values
 
     data.drop(['label'], axis=1, inplace=True)
-    scale.fit(data)
-    data = scale.transform(data)
+    # scale.fit(data)
+    # data = scale.transform(data)
 
+    x = data.values
     # x = data.values
-    x = data
     y = labels
 
     ### Running the model
-    network = Classifier(784, 10, [32], learning_rate=0.1)
-    network.model(x, y, 10)
+    network = Classifier(4, 3, [5], learning_rate=0.1)
+    network.model(x, y, 500)
     network.epoch_vs_error(savefig=True)
-    print(network.predict(x[5]), y[5])
-    # print(network.activations)
+    print(network.predict(x[0]), y[0])

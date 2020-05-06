@@ -9,10 +9,10 @@ from sklearn.preprocessing import MinMaxScaler
 # Custom Modules
 from metrics import MSE
 from encoding import OneHotEncoder
-from activations import sigmoid
+from activations import Activation
 
-class Classifier():
-    def __init__(self, features, labels, hidden_layer=[], learning_rate=0.01):
+class NeuralNetwork():
+    def __init__(self, features, labels, hidden_layer=[], learning_rate=0.01, activation='sigmoid', initializer='glorot'):
         self.model_ran = False
         self.epochs = 10
         self.lr = learning_rate
@@ -20,18 +20,18 @@ class Classifier():
         self.hidden_layers = hidden_layer
         self.output = labels
         self.layers = len(hidden_layer) + 2
-        self.nodes = [self.input]
-        for node in self.hidden_layers:
-            self.nodes = self.nodes + [node]
-        self.nodes = self.nodes + [self.output]
-        self.__initialize_weights()
+        self.dims = []
+        for node in ([self.input] + self.hidden_layers + [self.output]):
+            self.dims = self.dims + node
+        self.__initialize_weights(variant=initializer)
         self.zero_grad()
-        self.a = dict()
+        self.temp = Activation(activation)
+        self.activation = self.temp.function
 
     def __str__(self):
         about_hyperp = "Epochs: "+str(self.epochs)+", Learning Rate: "+str(self.lr)
         about_layers = ", Layers: "+str(self.layers)
-        return "Classifier("+about_hyperp+about_layers+")\n"
+        return "NeuralNetwork("+about_hyperp+about_layers+")\n"
 
     def __initialization(self, row, col, variant='glorot', bias=False):
         # Initializing the weight matrix with random values.
@@ -55,12 +55,12 @@ class Classifier():
 
         return w, b
 
-    def __initialize_weights(self):
+    def __initialize_weights(self, variant):
         self.W = dict()
         self.b = dict()
 
         for n in range(self.layers-1):
-            w, b = self.__initialization(self.nodes[n+1], self.nodes[n])
+            w, b = self.__initialization(self.dims[n+1], self.dims[n], variant=variant)
             self.W["W"+str(n+1)], self.b["b"+str(n+1)] = w, b
 
         return
@@ -99,7 +99,7 @@ class Classifier():
 
         for n in range(self.layers-1):
             self.z['z'+str(n+1)] = np.dot(self.W['W'+str(n+1)], self.a['a'+str(n)]) + self.b['b'+str(n+1)]
-            self.a['a'+str(n+1)] = sigmoid(self.z['z'+str(n+1)])
+            self.a['a'+str(n+1)] = self.activation(self.z['z'+str(n+1)])
 
         return self.a['a'+str(self.layers - 1)]
 
@@ -110,10 +110,10 @@ class Classifier():
             if n == self.layers-1:
                 self.delta[n] = (actual - self.a['a'+str(n)])
             else:
-                self.delta[n] = np.dot(self.W['W'+str(n+1)].T, self.delta[n+1]*sigmoid(self.z['z'+str(n+1)], derivative=True))
+                self.delta[n] = np.dot(self.W['W'+str(n+1)].T, self.delta[n+1]*self.activation(self.z['z'+str(n+1)], derivative=True))
 
-            self.dW['dW'+str(n)] += np.dot(self.delta[n]*sigmoid(self.z['z'+str(n)], derivative=True), self.a['a'+str(n-1)].T)/self.data_size
-            self.db['db'+str(n)] += self.delta[n]*sigmoid(self.z['z'+str(n)], derivative=True)/self.data_size
+            self.dW['dW'+str(n)] += np.dot(self.delta[n]*self.activation(self.z['z'+str(n)], derivative=True), self.a['a'+str(n-1)].T)/self.data_size
+            self.db['db'+str(n)] += self.delta[n]*self.activation(self.z['z'+str(n)], derivative=True)/self.data_size
 
         return
 
@@ -155,13 +155,18 @@ class Classifier():
         self.db = dict()
 
         for n in range(self.layers-1):
-            self.dW['dW'+str(n+1)] = np.zeros((self.nodes[n+1], self.nodes[n]))
-            self.db['db'+str(n+1)] = np.zeros((self.nodes[n+1], 1))
+            self.dW['dW'+str(n+1)] = np.zeros((self.dims[n+1], self.dims[n]))
+            self.db['db'+str(n+1)] = np.zeros((self.dims[n+1], 1))
 
         return
 
     def debug(self, more_verbose):
-        pass
+        print("Weights: ", self.W)
+        print("Biases: ", self.b)
+
+        if more_verbose:
+            print("Overall Weight change: ", self.dW)
+            print("Overall Bias change: ", self.db)
 
     def get_weights(self):
         return self.W
@@ -170,9 +175,8 @@ class Classifier():
         return self.b
 
     def summary(self):
-        if self.model_ran is False:
-            print("Run the model to view summary")
-            return
+        for nodes in self.dims:
+            print("")
 
     def epoch_vs_error(self, savefig=False):
         if self.model_ran is False:
@@ -223,7 +227,7 @@ if __name__ == '__main__':
     y = labels
 
     ### Running the model
-    network = Classifier(4, 3, [5], learning_rate=0.1)
+    network = NeuralNetwork(4, 3, [], learning_rate=0.1)
     network.model(x, y, 500)
     network.epoch_vs_error(savefig=True)
     print(network.predict(x[0]), y[0])

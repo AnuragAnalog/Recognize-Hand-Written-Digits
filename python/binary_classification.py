@@ -12,9 +12,11 @@ from encoding import OneHotEncoder
 from activations import Activation
 
 class NeuralNetwork():
-    def __init__(self, features, labels, hidden_layer=[], learning_rate=0.01, activation='sigmoid', initializer='glorot'):
-        self.model_ran = False
+    def __init__(self, features, labels, hidden_layer=[], learning_rate=0.01, activation='sigmoid', initializer='glorot', dropout=None):
         self.epochs = 10
+        self.predicting = False
+        self.model_ran = False
+        self.dropout = dropout
         self.lr = learning_rate
         self.input = features
         self.hidden_layers = hidden_layer
@@ -22,7 +24,7 @@ class NeuralNetwork():
         self.layers = len(hidden_layer) + 2
         self.dims = []
         for node in ([self.input] + self.hidden_layers + [self.output]):
-            self.dims = self.dims + node
+            self.dims = self.dims + [node]
         self.__initialize_weights(variant=initializer)
         self.zero_grad()
         self.temp = Activation(activation)
@@ -98,6 +100,10 @@ class NeuralNetwork():
         self.z = dict()
 
         for n in range(self.layers-1):
+            if (self.dropout is not None) and (self.predicting is False):
+                dn = np.random.rand(*self.a['a'+str(n)].shape) < (1 - self.dropout)
+                self.a['a'+str(n)] = np.multiply(self.a['a'+str(n)], dn)
+
             self.z['z'+str(n+1)] = np.dot(self.W['W'+str(n+1)], self.a['a'+str(n)]) + self.b['b'+str(n+1)]
             self.a['a'+str(n+1)] = self.activation(self.z['z'+str(n+1)])
 
@@ -201,14 +207,18 @@ class NeuralNetwork():
             print("Dimension mismatch")
             sys.exit()
 
+        self.predicting = True
+
         vector = self.__reshape_input(y_new)
         predicted = self.forward(vector)
+
+        self.predicting = False
 
         return predicted
 
 if __name__ == '__main__':
     fname = 'iris-data.csv'
-    data = pd.read_csv(fname)
+    data = pd.read_csv(fname, nrows=30000)
 
     ### Preproscessing
     # scale = MinMaxScaler()
@@ -227,7 +237,7 @@ if __name__ == '__main__':
     y = labels
 
     ### Running the model
-    network = NeuralNetwork(4, 3, [], learning_rate=0.1)
-    network.model(x, y, 500)
+    network = NeuralNetwork(4, 3, [7], learning_rate=0.01, dropout=0.1)
+    network.model(x, y, 1000)
     network.epoch_vs_error(savefig=True)
     print(network.predict(x[0]), y[0])
